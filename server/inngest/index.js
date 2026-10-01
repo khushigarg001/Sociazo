@@ -1,5 +1,5 @@
 import { Inngest } from "inngest";
-import User from "../configs/models/user";
+import User from "../configs/models/User.js";
 
 export const inngest = new Inngest({ id: "sociazo-app" });
 
