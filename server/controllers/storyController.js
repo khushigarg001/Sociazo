@@ -11,10 +11,18 @@ export const addUserStory = async (req, res) => {
         const media = req.file
         let media_url = ''
 
-        if(media_type == 'image' || media_type == 'video') {
-            const fileBuffer = fs.readFileSync(image.path);
+        // if(media_type == 'image' || media_type == 'video') {
+            if (media_type === 'image' || media_type === 'video') {
+                if (!media) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Story media file is missing"
+                    });
+                }
+            
+            const fileBuffer = fs.readFileSync(media.path);
              const base64File = fileBuffer.toString("base64")
-             const response = await imagekit.upload(
+             const response = await imagekit.files.upload(
                { file: base64File,
                 fileName: media.originalname,
                 folder: "story"}
@@ -39,7 +47,7 @@ export const addUserStory = async (req, res) => {
 
     } catch (error) {
         console.log(error)
-        res.json({succes: false, message: error.message})
+        res.json({success: false, message: error.message})
     }
 }
 
@@ -48,7 +56,11 @@ export const getStories = async (req, res) => {
         const { userId } = req.auth()
        const user =  await User.findById(userId)
 
-       const userIds = [userId, ...Story, ...user.connections, ...user.following]
+       const userIds = [
+        userId,
+        ...user.connections,
+        ...user.following
+    ]
 
        const stories= await Story.find({
         user: {$in: userIds}
@@ -58,6 +70,6 @@ export const getStories = async (req, res) => {
 
     } catch (error) {
         console.log(error)
-        res.json({succes: false, message: error.message})
+        res.json({success: false, message: error.message})
     }
 }

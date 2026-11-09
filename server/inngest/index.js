@@ -6,38 +6,60 @@ import Connection from "../configs/models/Connection.js";
 import sendEmail from "../configs/nodeMailer.js";
 import Story from "../configs/models/Story.js";
 import Message from "../configs/models/Message.js";
+import mongoose from "mongoose";
 
 export const inngest = new Inngest({ id: "sociazo-app" });
 
+
 const syncUserCreation = inngest.createFunction(
     {
-        id: "sync-user-from-clerk",
-        triggers: {
-            event: "clerk/user.created"
-        }
+      id: "sync-user-from-clerk",
+      triggers: {
+        event: "clerk/user.created"
+      }
     },
     async ({ event }) => {
-        const { id, first_name, last_name, email_addresses, image_url } = event.data;
-
-        let username = email_addresses[0].email_address.split("@")[0];
-
-        const user = await User.findOne({ username });
-
-        if (user) {
-            username = username + Math.floor(Math.random() * 10000);
-        }
-
-        const userData = {
-            _id: id,
-            email: email_addresses[0].email_address,
-            full_name: first_name + " " + last_name,
-            profile_picture: image_url,
-            username
-        };
-
-        await User.create(userData);
+      const {
+        id,
+        first_name,
+        last_name,
+        email_addresses,
+        image_url
+      } = event.data;
+  
+      const email = email_addresses?.[0]?.email_address;
+  
+      if (!id || !email) {
+        throw new Error("Missing Clerk user ID or email");
+      }
+  
+      const existingUser = await User.findById(id);
+  
+      if (existingUser) {
+        return { message: "User already synced" };
+      }
+  
+      let username = email.split("@")[0];
+  
+      const usernameExists = await User.findOne({ username });
+  
+      if (usernameExists) {
+        username = `${username}${Math.floor(Math.random() * 10000)}`;
+      }
+  
+      await User.create({
+        _id: id,
+        email,
+        // full_name: [first_name, last_name].filter(Boolean).join(" "),
+        full_name: [first_name, last_name].filter(Boolean).join(" ") || "Sociazo User",
+        profile_picture: image_url || "",
+        username
+      });
+  
+      return { message: "User synced successfully" };
     }
-);
+  );
+  
 
 const syncUserUpdation = inngest.createFunction(
     {
@@ -48,6 +70,9 @@ const syncUserUpdation = inngest.createFunction(
     },
     async ({ event }) => {
         const { id, first_name, last_name, email_addresses, image_url } = event.data;
+        console.log("Sync user started:", id);
+
+console.log("MongoDB state:", mongoose.connection.readyState);
 
         const updatedUserData = {
             email: email_addresses[0].email_address,

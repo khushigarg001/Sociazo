@@ -1,6 +1,7 @@
 import fs from 'fs'
 import imagekit from '../configs/imagekit.js';
 import Post from '../configs/models/Post.js';
+
 import User from '../configs/models/User.js';
 
 export const addPost = async (req, res) => {
@@ -87,10 +88,11 @@ export const getFeedPost = async (req, res) => {
         const userIds = [userId, ...user.connections, ...user.following]
         const posts = await Post.find({user: {$in: userIds}}).populate('user').sort({createdAt: -1});
 
-        res.json({succes: true, posts})
+        res.json({ success: true, posts })
     } catch (error) {
         console.log(error)
-        res.json({succes: false, message: error.message})
+        // res.json({ success: false, message: error.message })
+        res.status(500).json({ success: false, message: error.message })
     }
 }
 
@@ -111,6 +113,7 @@ export const likePost = async (req, res) => {
         }
     } catch (error) {
         console.log(error)
-        res.json({succes: false, message: error.message})
+        // res.json({succes: false, message: error.message})
+        res.status(500).json({ success: false, message: error.message })
     }
 }
