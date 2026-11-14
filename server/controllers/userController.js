@@ -5,6 +5,7 @@ import User from "../configs/models/User.js"
 import { toFile } from "@imagekit/nodejs"
 import fs from 'fs'
 import { inngest } from "../inngest/index.js"
+import { clerkClient } from "@clerk/express";
 
 
 // export const getUserData = async (req, res) => {
@@ -21,30 +22,73 @@ import { inngest } from "../inngest/index.js"
 //     }
 // }
 
+
 export const getUserData = async (req, res) => {
     try {
-        const { userId } = req.auth()
+        const { userId } = req.auth();
 
-        console.log("CLERK USER ID:", userId)
+        let user = await User.findById(userId);
 
-        const user = await User.findById(userId)
-
-        console.log("MONGODB USER:", user)
-
-        if (!user) {
-            return res.json({
-                success: false,
-                message: "User not found"
-            })
+        // If user already exists in MongoDB
+        if (user) {
+            return res.status(200).json({
+                success: true,
+                user
+            });
         }
 
-        res.json({ success: true, user })
+        // Fetch user details from Clerk
+        const clerkUser = await clerkClient.users.getUser(userId);
+
+        const email =
+            clerkUser.emailAddresses.find(
+                e => e.id === clerkUser.primaryEmailAddressId
+            )?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress;
+
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: "Email not found in Clerk account"
+            });
+        }
+
+        let username = email.split("@")[0];
+
+        const usernameExists = await User.findOne({ username });
+
+        if (usernameExists) {
+            username = `${username}${Math.floor(Math.random() * 10000)}`;
+        }
+
+        // Create missing MongoDB user
+        user = await User.create({
+            _id: userId,
+            email,
+            full_name:
+                [clerkUser.firstName, clerkUser.lastName]
+                    .filter(Boolean)
+                    .join(" ") || "Sociazo User",
+            profile_picture: clerkUser.imageUrl || "",
+            username
+        });
+
+        console.log("User created in MongoDB:", userId);
+
+        return res.status(200).json({
+            success: true,
+            user
+        });
 
     } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
+        console.error("GET USER DATA ERROR:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
     }
-}
+};
+
 
 export const updateUserData = async (req, res) => {
     try {
@@ -145,7 +189,10 @@ export const discoverUsers = async (req, res) => {
             {location: new RegExp(input, 'i')},
         ]
        })
-       const filteredUsers = allUsers.filter(user => user._id !== userId)
+    //    const filteredUsers = allUsers.filter(user => user._id !== userId)
+    const filteredUsers = allUsers.filter(
+        user => user._id.toString() !== userId
+    )
 
        res.json({success: true, users: filteredUsers})
     } catch (error) {
@@ -154,31 +201,75 @@ export const discoverUsers = async (req, res) => {
     }
 }
 
+// export const followeUser = async (req, res) => {
+//     try {
+//         const { userId } = req.auth()
+//        const { id } = req.body;
+
+//        const user = await User.findById(userId)
+
+//        if(user.following.includes(id)){
+//         return res.json({success: false, message: "You are already following this user"})
+//        }
+       
+//        user.following.push(id);
+//        await user.save()
+
+//        const toUser = await User.findById(id)
+//        toUser.followers.push(userId)
+//        await toUser.save()
+
+//        res.json({success: true, message: "Now you are following this user"})
+
+//     } catch (error) {
+//         console.log(error)
+//         res.json({success: false, message: error.message})
+//     }
+// }
+
+
 export const followeUser = async (req, res) => {
     try {
         const { userId } = req.auth()
-       const { id } = req.body;
+        const { id } = req.body
 
-       const user = await User.findById(userId)
+        const user = await User.findById(userId)
+        const toUser = await User.findById(id)
 
-       if(user.following.includes(id)){
-        return res.json({success: false, message: "You are already following this user"})
-       }
-       
-       user.following.push(id);
-       await user.save()
+        if (!user || !toUser) {
+            return res.json({
+                success: false,
+                message: "User not found"
+            })
+        }
 
-       const toUser = await User.findById(id)
-       toUser.followers.push(userId)
-       await toUser.save()
+        if (user.following.includes(id)) {
+            return res.json({
+                success: false,
+                message: "You are already following this user"
+            })
+        }
 
-       res.json({success: true, message: "Now you are following this user"})
+        user.following.push(id)
+        toUser.followers.addToSet(userId)
+
+        await user.save()
+        await toUser.save()
+
+        res.json({
+            success: true,
+            message: "Now you are following this user"
+        })
 
     } catch (error) {
         console.log(error)
-        res.json({success: false, message: error.message})
+        res.json({
+            success: false,
+            message: error.message
+        })
     }
 }
+
 
 export const unfollowUser = async (req, res) => {
     try {
@@ -261,34 +352,94 @@ export const getUserConnections = async (req, res) => {
     }
 }
 
+// export const acceptConnectionRequest = async (req, res) => {
+//     try {
+//         const {userId} = req.auth()
+//         const { id } = req.body
+//         const connection  = await Connection.findOne({from_user_id: id, to_user_id: userId})
+        
+//         if(!connection) {
+//             return res.json({success: false, message: "Connection not found"})
+//         }
+//         const user = await connection.findById(userId) 
+//         user.connections.push(id)
+//         await user.save()
+
+//         const toUser = await connection.findById(id) 
+//         toUser.connections.push(userId)
+//         await toUser.save()
+
+//         connection.status = "accepted";
+//         await connection.save()
+
+//         res.json({success: true, message: 'Connection accepted successfully'})
+
+//     } catch (error) {
+//         console.log(error)
+//         res.json({success: false, message: error.message})
+    
+//     }
+// }
+
+
+
 export const acceptConnectionRequest = async (req, res) => {
     try {
-        const {userId} = req.auth()
-        const { id } = req.body()
-        const connection  = await Connection.findOne({from_user_id: id, to_user_id: userId})
-        
-        if(!connection) {
-            return res.json({success: false, message: "Connection not found"})
+        const { userId } = req.auth()
+        const { id } = req.body
+
+        const connection = await Connection.findOne({
+            from_user_id: id,
+            to_user_id: userId
+        })
+
+        if (!connection) {
+            return res.json({
+                success: false,
+                message: "Connection not found"
+            })
         }
-        const user = await connection.findById(userId) 
-        user.connections.push(id)
+
+        if (connection.status === "accepted") {
+            return res.json({
+                success: false,
+                message: "Connection already accepted"
+            })
+        }
+
+        const user = await User.findById(userId)
+        const fromUser = await User.findById(id)
+
+        if (!user || !fromUser) {
+            return res.json({
+                success: false,
+                message: "User not found"
+            })
+        }
+
+        user.connections.addToSet(id)
+        fromUser.connections.addToSet(userId)
+
         await user.save()
+        await fromUser.save()
 
-        const toUser = await connection.findById(id) 
-        toUser.connections.push(userId)
-        await toUser.save()
-
-        connection.status = "accepted";
+        connection.status = "accepted"
         await connection.save()
 
-        res.json({success: true, message: 'Connection accepted successfully'})
+        res.json({
+            success: true,
+            message: "Connection accepted successfully"
+        })
 
     } catch (error) {
         console.log(error)
-        res.json({success: false, message: error.message})
-    
+        res.json({
+            success: false,
+            message: error.message
+        })
     }
 }
+
 
 export const getUserProfiles = async (req, res) => {
     try {
