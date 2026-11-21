@@ -4,16 +4,78 @@ import Loading from '../components/Loading'
 import StoriesBar from '../components/StoriesBar'
 import PostCard from '../components/PostCard'
 import RecentMessages from '../components/RecentMessages'
+import { useAuth } from '@clerk/react'
+import api from '../api/axios'
+import toast from 'react-hot-toast'
 
 const Feed = () => {
 
   const [feeds, setFeeds] = useState([])
   const [loading, setLoading] = useState(true)
+  const { getToken } = useAuth()
+
+  // const fetchFeeds = async () => {
+  //   try {
+  //     setLoading(true)
+  
+  //     const token = await getToken()
+  //     console.log("TOKEN:", token)
+  
+  //     const { data } = await api.get('/api/post/feed', {
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //       },
+  //     })
+  
+  //     // console.log("FEED API RESPONSE:", data)
+  //     console.log("FEED API RESPONSE:", JSON.stringify(data, null, 2))
+  
+  //     if (data.success) {
+  //       console.log("POSTS:", data.posts)
+  //       setFeeds(data.posts)
+  //     } else {
+  //       // console.log("FEED ERROR:", data.message)
+  //       console.log("FEED ERROR:", JSON.stringify(data, null, 2))
+  //       toast.error(data.message)
+  //     }
+  
+  //   } catch (error) {
+  //     console.log("FEED REQUEST ERROR:", error)
+  //     console.log("STATUS:", error.response?.status)
+  //     console.log("RESPONSE:", error.response?.data)
+  
+  //     toast.error(error.response?.data?.message || error.message)
+  //   } finally {
+  //     setLoading(false)
+  //   }
+  // }
 
   const fetchFeeds = async () => {
-    setFeeds(dummyPostsData)
-    setLoading(false)
-  }
+    try {
+      setLoading(true);
+  
+      const token = await getToken();
+  
+      const { data } = await api.get('/api/post/feed', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+  
+      console.log("FEED RESPONSE:", data);
+  
+      if (data.success) {
+        setFeeds(data.posts);
+      } else {
+        toast.error(data.message || "Failed to fetch posts");
+      }
+    } catch (error) {
+      console.error("FEED ERROR:", error.response?.data || error.message);
+      toast.error(error.response?.data?.message || error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(()=> {
     fetchFeeds()
